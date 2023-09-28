@@ -95,44 +95,46 @@ func (c *extractHint) Run(input []byte) ([]byte, error) {
 }
 
 func (c *extractHint) RunConfidential(backend *SuaveExecutionBackend, input []byte) ([]byte, error) {
-	// unpacked, err := artifacts.SuaveAbi.Methods["extractHint"].Inputs.Unpack(input)
+	unpacked, err := artifacts.SuaveAbi.Methods["extractHint"].Inputs.Unpack(input)
+	if err != nil {
+		return []byte(err.Error()), err
+	}
+
+	bundleBytes := unpacked[0].([]byte)
+
+	return c.runImpl(backend, bundleBytes)
+
+}
+
+func (c *extractHint) runImpl(backend *SuaveExecutionBackend, bundleBytes []byte) ([]byte, error) {
+	return nil, errors.New("NOT IMPLEMENTED")
+
+	// bundle := struct {
+	// 	Txs             types.Transactions `json:"txs"`
+	// 	RevertingHashes []common.Hash      `json:"revertingHashes"`
+	// 	RefundPercent   int                `json:"percent"`
+	// 	MatchId         [16]byte           `json:"MatchId"`
+	// }{}
+
+	// err := json.Unmarshal(bundleBytes, &bundle)
 	// if err != nil {
 	// 	return []byte(err.Error()), err
 	// }
 
-	// bundleBytes := unpacked[0].([]byte)
+	// tx := bundle.Txs[0]
+	// hint := struct {
+	// 	To   common.Address
+	// 	Data []byte
+	// }{
+	// 	To:   *tx.To(),
+	// 	Data: tx.Data(),
+	// }
 
-	// return c.runImpl(backend, bundleBytes)
-	return nil, errors.New("NOT IMPLEMENTED")
-}
-
-func (c *extractHint) runImpl(backend *SuaveExecutionBackend, bundleBytes []byte) ([]byte, error) {
-	bundle := struct {
-		Txs             types.Transactions `json:"txs"`
-		RevertingHashes []common.Hash      `json:"revertingHashes"`
-		RefundPercent   int                `json:"percent"`
-		MatchId         [16]byte           `json:"MatchId"`
-	}{}
-
-	err := json.Unmarshal(bundleBytes, &bundle)
-	if err != nil {
-		return []byte(err.Error()), err
-	}
-
-	tx := bundle.Txs[0]
-	hint := struct {
-		To   common.Address
-		Data []byte
-	}{
-		To:   *tx.To(),
-		Data: tx.Data(),
-	}
-
-	hintBytes, err := json.Marshal(hint)
-	if err != nil {
-		return []byte(err.Error()), err
-	}
-	return hintBytes, nil
+	// hintBytes, err := json.Marshal(hint)
+	// if err != nil {
+	// 	return []byte(err.Error()), err
+	// }
+	// return hintBytes, nil
 }
 
 type buildEthBlock struct {
