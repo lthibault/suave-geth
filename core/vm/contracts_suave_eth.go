@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -94,14 +95,15 @@ func (c *extractHint) Run(input []byte) ([]byte, error) {
 }
 
 func (c *extractHint) RunConfidential(backend *SuaveExecutionBackend, input []byte) ([]byte, error) {
-	unpacked, err := artifacts.SuaveAbi.Methods["extractHint"].Inputs.Unpack(input)
-	if err != nil {
-		return []byte(err.Error()), err
-	}
+	// unpacked, err := artifacts.SuaveAbi.Methods["extractHint"].Inputs.Unpack(input)
+	// if err != nil {
+	// 	return []byte(err.Error()), err
+	// }
 
-	bundleBytes := unpacked[0].([]byte)
+	// bundleBytes := unpacked[0].([]byte)
 
-	return c.runImpl(backend, bundleBytes)
+	// return c.runImpl(backend, bundleBytes)
+	return nil, errors.New("NOT IMPLEMENTED")
 }
 
 func (c *extractHint) runImpl(backend *SuaveExecutionBackend, bundleBytes []byte) ([]byte, error) {
