@@ -3,8 +3,8 @@ package vm
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -20,6 +20,8 @@ import (
 	"github.com/flashbots/go-boost-utils/bls"
 	"github.com/flashbots/go-boost-utils/ssz"
 	"github.com/holiman/uint256"
+	"github.com/tetratelabs/wazero"
+	wasi "github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 
 	builderCapella "github.com/attestantio/go-builder-client/api/capella"
 	builderV1 "github.com/attestantio/go-builder-client/api/v1"
@@ -106,35 +108,82 @@ func (c *extractHint) RunConfidential(backend *SuaveExecutionBackend, input []by
 
 }
 
+var (
+	//go:embed internal/main.wasm
+	src   []byte
+	cache = wazero.NewCompilationCache()
+)
+
 func (c *extractHint) runImpl(backend *SuaveExecutionBackend, bundleBytes []byte) ([]byte, error) {
-	return nil, errors.New("NOT IMPLEMENTED")
+	// return c.runImplOld(backend, bundleBytes)
 
-	// bundle := struct {
-	// 	Txs             types.Transactions `json:"txs"`
-	// 	RevertingHashes []common.Hash      `json:"revertingHashes"`
-	// 	RefundPercent   int                `json:"percent"`
-	// 	MatchId         [16]byte           `json:"MatchId"`
-	// }{}
+	// Enforce a maximum execution time for the WASM code.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
 
-	// err := json.Unmarshal(bundleBytes, &bundle)
-	// if err != nil {
-	// 	return []byte(err.Error()), err
-	// }
+	// Instantiate the Wazero runtime.
+	r := wazero.NewRuntimeWithConfig(ctx, wazero.NewRuntimeConfig().
+		WithCloseOnContextDone(true).
+		WithCompilationCache(cache))
+	defer r.Close(ctx)
 
-	// tx := bundle.Txs[0]
-	// hint := struct {
-	// 	To   common.Address
-	// 	Data []byte
-	// }{
-	// 	To:   *tx.To(),
-	// 	Data: tx.Data(),
-	// }
+	// Instantiate WASI.
+	sys, err := wasi.Instantiate(ctx, r)
+	if err != nil {
+		return nil, fmt.Errorf("init wasi: %w", err)
+	}
+	defer sys.Close(ctx)
 
-	// hintBytes, err := json.Marshal(hint)
-	// if err != nil {
-	// 	return []byte(err.Error()), err
-	// }
-	// return hintBytes, nil
+	// Compile the WASM bytecode to Wazero IR.
+	ir, err := r.CompileModule(ctx, src)
+	if err != nil {
+		return nil, fmt.Errorf("compile: %w", err)
+	}
+	defer ir.Close(ctx)
+
+	stdin := bytes.NewBuffer(bundleBytes)
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+
+	mod, err := r.InstantiateModule(ctx, ir, wazero.NewModuleConfig().
+		WithStdin(stdin).
+		WithStdout(stdout).
+		WithStderr(stderr))
+	if err != nil {
+		return stdout.Bytes(), fmt.Errorf("init module: %w", err)
+	}
+	defer mod.Close(ctx)
+
+	return stdout.Bytes(), nil
+}
+
+func (c *extractHint) runImplOld(backend *SuaveExecutionBackend, bundleBytes []byte) ([]byte, error) {
+	bundle := struct {
+		Txs             types.Transactions `json:"txs"`
+		RevertingHashes []common.Hash      `json:"revertingHashes"`
+		RefundPercent   int                `json:"percent"`
+		MatchId         [16]byte           `json:"MatchId"`
+	}{}
+
+	err := json.Unmarshal(bundleBytes, &bundle)
+	if err != nil {
+		return []byte(err.Error()), err
+	}
+
+	tx := bundle.Txs[0]
+	hint := struct {
+		To   common.Address
+		Data []byte
+	}{
+		To:   *tx.To(),
+		Data: tx.Data(),
+	}
+
+	hintBytes, err := json.Marshal(hint)
+	if err != nil {
+		return []byte(err.Error()), err
+	}
+	return hintBytes, nil
 }
 
 type buildEthBlock struct {
